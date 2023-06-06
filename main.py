@@ -1,0 +1,139 @@
+import requests
+import csv
+
+# Authentication
+client_id = "65aff7968a9d48e582f3ded5c4485e0a"
+client_secret = "ff16a55133964ea4b9f67631d8ad44f4"
+
+auth_url = 'https://accounts.spotify.com/api/token'
+
+auth_response = requests.post(auth_url, {
+    'grant_type': 'client_credentials',
+    'client_id': client_id,
+    'client_secret': client_secret,
+})
+
+auth_response_data = auth_response.json()
+
+access_token = auth_response_data['access_token']
+
+headers = {'Authorization': 'Bearer {token}'.format(token=access_token)}
+
+# base URL of all Spotify API endpoints
+base_url = 'https://api.spotify.com/v1/'
+
+# Search with limit=15 (default limit=20)
+print('Spotify Searching Program by Silvia Silva and Jodie Coleman')
+print('Search by artist or band name to obtain their albums, or by album name to obtain its tracks')
+search_type = str(input('Search by 1 - Artist/Band, 2 - Album: ')).strip()
+search_url_type = ''
+search_dict_type = ''
+
+if search_type == '1':
+    search_url_type = 'artist'
+    search_dict_type = 'artists'
+    search_term = input("Artist/Band name: ").strip().lower()
+elif search_type == '2':
+    search_url_type = 'album'
+    search_dict_type = 'albums'
+    search_term = input("Album name: ").strip().lower()
+else:
+    print('Invalid choice. Please restart program')
+    quit()
+
+search_url = '{}search?type={}&q={}&limit=15'.format(base_url, search_url_type, search_term)
+
+response = requests.get(search_url, headers=headers)
+search = response.json()
+
+# Search results
+artists_results = []
+albums_results = []
+
+for item in search[search_dict_type]['items']:
+    if search_dict_type == 'artists':
+        artists_results.append({'artist_name': item['name'],
+                                'artist_id': item['id']})
+    else:
+        albums_results.append({'album_name': item['name'],
+                               'album_artist_name': item['artists'][0]['name'],
+                               'album_type': item['album_type'],
+                               'release_date': item['release_date'],
+                               'total_tracks': item['total_tracks'],
+                               'album_id': item['id'],
+                               })
+
+for num, artist in enumerate(artists_results, start=1):
+    print(num, '-', artist['artist_name'])
+
+for num2, album in enumerate(albums_results, start=1):
+    print(num2, '-', album['album_name'], 'by', album['album_artist_name'], '- type:', album['album_type'],
+          '- release date:', album['release_date'], '- total tracks:', album['total_tracks'])
+
+# Search results selection with limit=50 (max allowed limit)
+user_pick = int(input('Desired {} option: '.format(search_url_type)).strip()) - 1
+
+if search_type != '1':
+    print(albums_results[user_pick]['album_name'], 'by', albums_results[user_pick]['album_artist_name'], '- type:',
+          albums_results[user_pick]['album_type'], '- release date:', albums_results[user_pick]['release_date'],
+          '- total tracks:', albums_results[user_pick]['total_tracks'])
+    search_album_tracks = '{}albums/{}/tracks?limit=50'.format(base_url, albums_results[user_pick]['album_id'])
+    response_album = requests.get(search_album_tracks, headers=headers)
+    search_album = response_album.json()
+    albums_results_tracks = []
+    for track in search_album['items']:
+        duration_min = round(int(((track['duration_ms']) / 60000) % 60), 2)
+        duration_sec = round(int(((track['duration_ms']) / 1000) % 60), 2)
+        albums_results_tracks.append({'track_number': track['track_number'],
+                                      'track_name': track['name'],
+                                      'track_duration': "{}:{:02d}".format(duration_min, duration_sec),
+                                      })
+else:
+    print(artists_results[user_pick]['artist_name'])
+    search_artist_albums = '{}artists/{}/albums?limit=50'.format(base_url, artists_results[user_pick]['artist_id'])
+    response_artists = requests.get(search_artist_albums, headers=headers)
+    search_artist = response_artists.json()
+    artist_results_albums = []
+    for albums in search_artist['items']:
+        if artists_results[user_pick]['artist_id'] == albums['artists'][0]['id']:
+            artist_results_albums.append({'album_name': albums['name'],
+                                          'album_type': albums['album_type'],
+                                          'release_date': albums['release_date'],
+                                          'total_tracks': albums['total_tracks'],
+                                          })
+if search_type != '1':
+    for tracks in albums_results_tracks:
+        print(tracks['track_number'], '-', tracks['track_name'], '- duration:', tracks['track_duration'])
+else:
+    for albums2 in artist_results_albums:
+        print(albums2['album_name'], '- type:', albums2['album_type'], '- release date:', albums2['release_date'],
+              '- total tracks:', albums2['total_tracks'])
+
+# Option to save in csv file
+save_in_file = input('Do you want to save it in file? Y/N? ').strip().lower()
+
+if search_type != '1':
+    if save_in_file == 'y':
+        field_names = ['track_number', 'track_name', 'track_duration']
+        with open('{} by {}.csv'.format(albums_results[user_pick]['album_name'],
+                                        albums_results[user_pick]['album_artist_name']), 'w+') as csv_file:
+            spreadsheet = csv.DictWriter(csv_file, fieldnames=field_names)
+            spreadsheet.writeheader()
+            spreadsheet.writerows(albums_results_tracks)
+    elif save_in_file == 'n':
+        quit()
+    else:
+        print('Invalid choice. Please restart program')
+        quit()
+else:
+    if save_in_file == 'y':
+        field_names = ['album_name', 'album_type', 'release_date', 'total_tracks']
+        with open("{}'s albums.csv".format(artists_results[user_pick]['artist_name']), 'w+') as csv_file:
+            spreadsheet = csv.DictWriter(csv_file, fieldnames=field_names)
+            spreadsheet.writeheader()
+            spreadsheet.writerows(artist_results_albums)
+    elif save_in_file == 'n':
+        quit()
+    else:
+        print('Invalid choice. Please restart program')
+        quit()
